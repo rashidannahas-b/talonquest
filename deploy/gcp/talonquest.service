@@ -1,0 +1,30 @@
+[Unit]
+Description=TalonQuest game server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=talonquest
+Group=talonquest
+WorkingDirectory=/opt/talonquest
+Environment=NODE_ENV=production
+Environment=PORT=8000
+ExecStart=/usr/bin/node server/js/main.js
+Restart=on-failure
+RestartSec=3s
+# Crash-loop guard: if the process fails 5 times in 60s, systemd gives up
+# instead of hammering GCP with retries that still cost money.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+# Resource ceilings prevent a runaway process from eating the whole VM.
+MemoryMax=900M
+TasksMax=4096
+LimitNOFILE=65536
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

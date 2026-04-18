@@ -1,0 +1,28 @@
+# TalonQuest Caddy config.
+# Terminates TLS (automatic Let's Encrypt) and reverse-proxies HTTP and
+# WebSocket traffic to the Node process on 127.0.0.1:__PORT__.
+# Placeholders (__DOMAIN__, __PORT__) are filled in by deploy/gcp/setup.sh.
+
+{
+    # Send Caddy's own logs to journald.
+    admin off
+}
+
+__DOMAIN__ {
+    encode zstd gzip
+
+    # Long idle timeout so live WebSocket sessions aren't dropped.
+    reverse_proxy 127.0.0.1:__PORT__ {
+        flush_interval -1
+        transport http {
+            read_timeout  1h
+            write_timeout 1h
+        }
+    }
+
+    log {
+        output stdout
+        format console
+        level  WARN
+    }
+}

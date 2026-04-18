@@ -65,7 +65,21 @@ The server reads the `PORT` environment variable (falling back to the
 `window.location`, so TLS (`wss://`) works automatically behind any
 reverse proxy.
 
-### Fly.io (recommended — free tier, great for WebSockets)
+### Google Cloud (GCE VM, cost-capped)
+
+See [`deploy/gcp/README.md`](deploy/gcp/README.md) for the full walkthrough.
+Short version: one `e2-small` VM + Caddy, flat ~$14/mo compute. **Set a
+billing budget alert before you create the VM** — GCP egress is the one bill
+that can run away on a WebSocket game.
+
+```
+gcloud compute scp deploy/gcp/setup.sh talonquest:/tmp/setup.sh --zone us-central1-a
+gcloud compute ssh talonquest --zone us-central1-a
+sudo DOMAIN=play.example.com REPO=https://github.com/<you>/talonquest.git BRANCH=main \
+  bash /tmp/setup.sh
+```
+
+### Fly.io (free tier, great for WebSockets)
 
 ```
 brew install flyctl              # or: curl -L https://fly.io/install.sh | sh

@@ -113,7 +113,20 @@ WS.MultiVersionWebsocketServer = Server.extend({
             serveStatic(req, res, self.status_callback);
         });
 
-        this._wss = new WebSocket.Server({ server: this._httpServer });
+        this._wss = new WebSocket.Server({
+            server: this._httpServer,
+            // perMessageDeflate cuts game-state bandwidth ~60–80% at the cost
+            // of some CPU. The thresholds/levels below are tuned to skip tiny
+            // messages (cheaper to send uncompressed) and avoid pathological
+            // memory use on a shared-vCPU VM.
+            perMessageDeflate: {
+                zlibDeflateOptions: { level: 3, memLevel: 7 },
+                zlibInflateOptions: { chunkSize: 10 * 1024 },
+                clientNoContextTakeover: true,
+                serverNoContextTakeover: true,
+                threshold: 512
+            }
+        });
 
         this._wss.on('connection', function (socket, req) {
             socket.remoteAddress = (req && req.socket && req.socket.remoteAddress) || '';

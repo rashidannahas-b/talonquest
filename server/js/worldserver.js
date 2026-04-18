@@ -25,7 +25,7 @@ module.exports = World = cls.Class.extend({
         this.id = id;
         this.maxPlayers = maxPlayers;
         this.server = websocketServer;
-        this.ups = 50;
+        this.ups = 20;
         
         this.map = null;
         
