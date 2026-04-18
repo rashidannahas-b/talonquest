@@ -1,0 +1,18 @@
+{
+  "name": "talonquest",
+  "version": "0.1.0",
+  "description": "TalonQuest — an HTML5 mini-MMORPG adapted from Mozilla's BrowserQuest, with fishing that heals and a PvP zone called The Wild.",
+  "private": true,
+  "scripts": {
+    "start": "node server/js/main.js"
+  },
+  "dependencies": {
+    "underscore": "^1.13.6",
+    "sanitizer": "^0.1.3",
+    "ws": "^8.16.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MPL-2.0"
+}
