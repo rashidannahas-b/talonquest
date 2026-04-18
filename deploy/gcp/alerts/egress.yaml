@@ -1,0 +1,42 @@
+# Fires when sustained outbound internet traffic from the VM exceeds
+# ~1.4 MB/s (≈ 5 GB/hour). On GCE that is ~$0.60/hour in egress fees, so this
+# is the "wake me up before the bill doubles" alert.
+
+displayName: "TalonQuest: high egress (>5 GB/hour)"
+combiner: OR
+enabled: true
+notificationChannels:
+  - __CHANNEL__
+conditions:
+  - displayName: "VM egress exceeds 1.4 MB/s for 10 minutes"
+    conditionThreshold:
+      filter: |
+        metric.type="compute.googleapis.com/instance/network/sent_bytes_count"
+        resource.type="gce_instance"
+        metadata.user_labels."app"="__NAME__"
+      aggregations:
+        - alignmentPeriod: 60s
+          perSeriesAligner: ALIGN_RATE
+          crossSeriesReducer: REDUCE_SUM
+      comparison: COMPARISON_GT
+      thresholdValue: 1400000
+      duration: 600s
+alertStrategy:
+  autoClose: 604800s  # 7 days
+documentation:
+  mimeType: text/markdown
+  content: |
+    # High network egress on TalonQuest
+
+    The TalonQuest VM has been pushing more than ~1.4 MB/s of outbound
+    traffic for 10+ minutes. At GCE's standard egress rate (~$0.12/GB) this
+    is roughly $0.60/hour in egress charges on top of the normal VM bill.
+
+    Quick things to check:
+
+    - SSH in: `gcloud compute ssh __NAME__ --zone <zone>`
+    - Count connected players: `sudo journalctl -u talonquest | grep 'has joined' | wc -l`
+    - If traffic is legitimate, raise `nb_players_per_world` deliberately
+      rather than silently accepting the higher bill.
+    - If traffic looks like abuse, tighten the Caddy config to rate-limit
+      the offending IP or pull the firewall rule temporarily.

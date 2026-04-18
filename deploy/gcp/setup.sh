@@ -23,10 +23,27 @@
 
 set -euo pipefail
 
-: "${DOMAIN:?Set DOMAIN=your.host.name}"
-: "${REPO:?Set REPO=https://github.com/you/talonquest.git}"
+# Fall back to GCE instance metadata when env vars aren't provided. This lets
+# the script run either interactively (SSH in, export vars, run) or as the
+# VM's startup-script (provision.sh pushes values via --metadata).
+gce_meta() {
+  local key="$1"
+  curl -fsS -H "Metadata-Flavor: Google" \
+    "http://metadata.google.internal/computeMetadata/v1/instance/attributes/${key}" 2>/dev/null || true
+}
+
+: "${DOMAIN:=$(gce_meta DOMAIN)}"
+: "${REPO:=$(gce_meta REPO)}"
+: "${BRANCH:=$(gce_meta BRANCH)}"
+: "${PORT:=$(gce_meta PORT)}"
+
 BRANCH="${BRANCH:-main}"
 PORT="${PORT:-8000}"
+
+if [[ -z "${DOMAIN}" || -z "${REPO}" ]]; then
+  echo "DOMAIN and REPO must be set via env vars or GCE metadata" >&2
+  exit 1
+fi
 
 echo "==> Installing base packages"
 export DEBIAN_FRONTEND=noninteractive

@@ -1,0 +1,34 @@
+# Fires when the VM's CPU sits above 80% for 15 minutes. That is the signal
+# to resize the VM (or add a second world) rather than let the game feel bad.
+
+displayName: "TalonQuest: sustained high CPU"
+combiner: OR
+enabled: true
+notificationChannels:
+  - __CHANNEL__
+conditions:
+  - displayName: "CPU > 80% for 15 minutes"
+    conditionThreshold:
+      filter: |
+        metric.type="compute.googleapis.com/instance/cpu/utilization"
+        resource.type="gce_instance"
+        metadata.user_labels."app"="__NAME__"
+      aggregations:
+        - alignmentPeriod: 60s
+          perSeriesAligner: ALIGN_MEAN
+      comparison: COMPARISON_GT
+      thresholdValue: 0.8
+      duration: 900s
+alertStrategy:
+  autoClose: 86400s
+documentation:
+  mimeType: text/markdown
+  content: |
+    # TalonQuest VM is CPU-bound
+
+    The game server has been running hot. Options:
+
+    - Resize the VM: `gcloud compute instances set-machine-type __NAME__ \
+      --zone <zone> --machine-type e2-medium` (requires a brief reboot).
+    - Lower the tick rate: bump `this.ups` in `server/js/worldserver.js` down.
+    - Cap players: lower `nb_players_per_world` in `server/config.json`.

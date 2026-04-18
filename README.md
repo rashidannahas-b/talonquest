@@ -67,16 +67,24 @@ reverse proxy.
 
 ### Google Cloud (GCE VM, cost-capped)
 
-See [`deploy/gcp/README.md`](deploy/gcp/README.md) for the full walkthrough.
-Short version: one `e2-small` VM + Caddy, flat ~$14/mo compute. **Set a
-billing budget alert before you create the VM** — GCP egress is the one bill
-that can run away on a WebSocket game.
+One `e2-small` VM + Caddy, flat ~$14/mo compute. Full walkthrough in
+[`deploy/gcp/README.md`](deploy/gcp/README.md).
 
 ```
-gcloud compute scp deploy/gcp/setup.sh talonquest:/tmp/setup.sh --zone us-central1-a
-gcloud compute ssh talonquest --zone us-central1-a
-sudo DOMAIN=play.example.com REPO=https://github.com/<you>/talonquest.git BRANCH=main \
-  bash /tmp/setup.sh
+# 1. set the billing budget FIRST (alerts, not a hard cap — see docs)
+deploy/gcp/budget.sh --amount 25 --email you@example.com
+
+# 2. provision the VM, firewall, static IP, alerts and dashboard
+deploy/gcp/provision.sh \
+  --domain play.example.com \
+  --email  you@example.com \
+  --repo   https://github.com/<you>/talonquest.git
+
+# 3. point your DNS A record at the IP the script prints, wait ~2 min, open
+#    https://play.example.com/
+
+# tear it all down later:
+deploy/gcp/destroy.sh --name talonquest
 ```
 
 ### Fly.io (free tier, great for WebSockets)
