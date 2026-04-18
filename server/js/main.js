@@ -23,12 +23,16 @@ function main(config) {
         WorldServer = require("./worldserver"),
         _ = require('underscore');
 
+    // Honor the PORT env var used by most PaaS platforms (Fly, Render,
+    // Railway, Heroku, etc.). Config file still wins for local development.
+    var port = parseInt(process.env.PORT, 10) || config.port;
+
     // Make `log` globally available exactly like the original server expected.
     global.log = makeLog(config.debug_level || 'info');
 
     log.info("Starting TalonQuest game server...");
 
-    var server = new ws.MultiVersionWebsocketServer(config.port);
+    var server = new ws.MultiVersionWebsocketServer(port);
     var worlds = [];
 
     server.onConnect(function (connection) {

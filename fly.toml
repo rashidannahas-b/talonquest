@@ -1,0 +1,25 @@
+# Fly.io configuration for TalonQuest.
+# First time: `fly launch --copy-config --no-deploy`, then `fly deploy`.
+# Replace the `app` name with something unique to your Fly account.
+
+app = "talonquest"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 150
+    hard_limit = 200
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

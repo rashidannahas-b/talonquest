@@ -45,7 +45,14 @@ define(['player', 'entityfactory', 'lib/bison'], function(Player, EntityFactory,
         },
         
         connect: function(dispatcherMode) {
-            var url = "ws://"+ this.host +":"+ this.port +"/",
+            // Match the page protocol so deployments behind TLS use wss://.
+            // When the port matches the page, omit it from the URL so reverse
+            // proxies / CDNs (Fly, Render, Railway, etc.) route correctly.
+            var isHttps = (typeof window !== 'undefined' && window.location && window.location.protocol === 'https:');
+            var scheme = isHttps ? 'wss://' : 'ws://';
+            var samePort = (typeof window !== 'undefined' && window.location && String(window.location.port || (isHttps ? 443 : 80)) === String(this.port));
+            var hostPart = samePort ? this.host : (this.host + ':' + this.port);
+            var url = scheme + hostPart + '/',
                 self = this;
             
             log.info("Trying to connect to server : "+url);

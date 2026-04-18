@@ -47,6 +47,97 @@ See `server/js/player.js` for the fishing and PvP gameplay hooks, and
 `client/js/game.js` / `client/js/main.js` for the F-key, banner and PvP
 click handling.
 
+## Deploying
+
+The server is a single long-running Node process that speaks HTTP and
+WebSockets on one port, so it runs on anything that can keep a Node container
+alive and pass through WebSocket upgrades. The repository ships the pieces you
+need for a few common hosts:
+
+- `Dockerfile` — production image (Node 20 alpine, `npm ci --omit=dev`)
+- `fly.toml` — Fly.io deployment config
+- `render.yaml` — Render.com blueprint
+- `Procfile` — for Heroku / Railway nixpacks / similar
+
+The server reads the `PORT` environment variable (falling back to the
+`server/config.json` value), and the client's `config_local.json` uses
+`"host": "auto"` / `"port": "auto"` to derive the WebSocket URL from
+`window.location`, so TLS (`wss://`) works automatically behind any
+reverse proxy.
+
+### Fly.io (recommended — free tier, great for WebSockets)
+
+```
+brew install flyctl              # or: curl -L https://fly.io/install.sh | sh
+fly auth signup                   # or: fly auth login
+fly launch --copy-config --no-deploy  # pick a unique app name, keep the Dockerfile
+fly deploy
+fly open                          # opens https://<your-app>.fly.dev/
+```
+
+The included `fly.toml` keeps one machine warm (`min_machines_running = 1`)
+so live sockets aren't dropped when the app idles.
+
+### Render.com
+
+1. Push this repo to GitHub.
+2. In the Render dashboard, click *New → Blueprint* and point it at the
+   repo. Render will read `render.yaml` and create the web service.
+3. Wait for the first deploy, then visit `https://<service>.onrender.com/`.
+
+### Railway / Heroku-style (Procfile)
+
+```
+railway init
+railway up
+```
+
+or on Heroku:
+
+```
+heroku create my-talonquest
+git push heroku claude/add-fishing-combat-TwDGL:main
+heroku open
+```
+
+### Plain VPS (DigitalOcean, Hetzner, Linode…)
+
+```
+# on the box, as a deploy user
+git clone <your repo>
+cd talonquest
+npm ci --omit=dev
+# keep it running (systemd, pm2, or nohup)
+PORT=8000 pm2 start server/js/main.js --name talonquest
+pm2 save
+```
+
+Then put Nginx or Caddy in front to terminate TLS and proxy WebSockets:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name talonquest.example.com;
+    # ssl_certificate / ssl_certificate_key ...
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 3600s;
+    }
+}
+```
+
+### Local Docker test before you push
+
+```
+docker build -t talonquest .
+docker run --rm -p 8000:8000 talonquest
+open http://localhost:8000/
+```
+
 ## License
 
 MPL-2.0 — same as upstream BrowserQuest. See `LICENSE`.

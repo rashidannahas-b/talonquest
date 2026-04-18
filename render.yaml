@@ -1,0 +1,13 @@
+# Render.com blueprint. Connect the repo on https://dashboard.render.com/,
+# select "Blueprint" and point it at this file.
+services:
+  - type: web
+    name: talonquest
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production

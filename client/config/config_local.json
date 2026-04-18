@@ -1,5 +1,5 @@
 {
-    "host": "localhost",
-    "port": 8000,
+    "host": "auto",
+    "port": "auto",
     "dispatcher": false
 }

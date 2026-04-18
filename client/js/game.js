@@ -610,6 +610,17 @@ function(InfoManager, BubbleManager, Renderer, Map, Animation, Sprite, AnimatedT
         },
     
         setServerOptions: function(host, port, username) {
+            // When hosting the client and server behind a reverse proxy (Fly,
+            // Render, Railway, Nginx, etc.) config values of "auto" or empty
+            // resolve to the current page's host/port so TLS deployments work
+            // without editing the config file per environment.
+            var loc = (typeof window !== 'undefined') ? window.location : null;
+            if(loc && (!host || host === 'auto' || host === 'localhost')) {
+                host = loc.hostname || host;
+            }
+            if(loc && (!port || port === 'auto')) {
+                port = loc.port || (loc.protocol === 'https:' ? 443 : 80);
+            }
             this.host = host;
             this.port = port;
             this.username = username;
