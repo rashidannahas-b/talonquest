@@ -386,9 +386,12 @@ define(['jquery', 'app'], function($, App) {
                         }
                         return false;
                     }
-                    // Arrow keys and WASD: step one tile in that direction
-                    // via the existing pathfinder (so blockers and server
-                    // authority still apply).
+                    // Arrow keys and WASD: walk one tile in the pressed
+                    // direction. Holding a key would otherwise fire keydown
+                    // ~30x/sec and flood the pathfinder with conflicting
+                    // requests, so we remember the held direction and only
+                    // kick off a move when the player is not already walking
+                    // (onStep re-fires for continuous motion).
                     var dx = 0, dy = 0;
                     if(key === 37 || key === 65) { dx = -1; } // Left / A
                     else if(key === 39 || key === 68) { dx = 1; } // Right / D
@@ -396,10 +399,13 @@ define(['jquery', 'app'], function($, App) {
                     else if(key === 40 || key === 83) { dy = 1; } // Down / S
                     if(dx !== 0 || dy !== 0) {
                         if(game.ready && game.player && !game.player.isDead) {
-                            var gx = game.player.gridX + dx,
-                                gy = game.player.gridY + dy;
-                            if(!game.map.isColliding(gx, gy)) {
-                                game.makePlayerGoTo(gx, gy);
+                            game._heldDir = { dx: dx, dy: dy };
+                            if(!game.player.isMoving()) {
+                                var gx = game.player.gridX + dx,
+                                    gy = game.player.gridY + dy;
+                                if(!game.map.isColliding(gx, gy)) {
+                                    game.makePlayerGoTo(gx, gy);
+                                }
                             }
                         }
                         return false;
@@ -422,6 +428,30 @@ define(['jquery', 'app'], function($, App) {
             if(game.renderer.tablet) {
                 $('body').addClass('tablet');
             }
+
+            // Continuous movement: when the player finishes a step, if an
+            // arrow/WASD key is still being held, step again in that direction.
+            $(document).on('keyup', function(e) {
+                var k = e.which;
+                if(k === 37 || k === 38 || k === 39 || k === 40 ||
+                   k === 65 || k === 68 || k === 87 || k === 83) {
+                    game._heldDir = null;
+                }
+            });
+
+            // Re-fire movement on each step completion while a key is held.
+            // Hooked in via a polling loop because the player object is
+            // rebuilt on respawn and onStopPathing is already taken.
+            setInterval(function() {
+                if(!game || !game.ready || !game.player || game.player.isDead) { return; }
+                if(game.player.isMoving()) { return; }
+                var d = game._heldDir;
+                if(!d) { return; }
+                var gx = game.player.gridX + d.dx, gy = game.player.gridY + d.dy;
+                if(!game.map.isColliding(gx, gy)) {
+                    game.makePlayerGoTo(gx, gy);
+                }
+            }, 40);
 
             // Redraw the world whenever the browser window resizes so the
             // canvas fills the new viewport instead of letterboxing.

@@ -693,9 +693,18 @@ function(InfoManager, BubbleManager, Renderer, Map, Animation, Sprite, AnimatedT
                 // TalonQuest: keep the player centred every frame (Runescape
                 // style) instead of only scrolling when the player crosses a
                 // zone boundary. The terrain canvas is re-rendered each tick
-                // because the camera moves continuously now.
+                // because the camera moves continuously now, and the visible
+                // set of animated tiles (water, torches) needs to be refreshed
+                // whenever the camera moves or new water tiles appear as
+                // black holes on the terrain.
                 if(this.player && this.renderer && this.renderer.camera) {
                     this.renderer.camera.lookAt(this.player);
+                    var c = this.renderer.camera;
+                    if(this._lastCamGX !== c.gridX || this._lastCamGY !== c.gridY) {
+                        this._lastCamGX = c.gridX;
+                        this._lastCamGY = c.gridY;
+                        this.initAnimatedTiles();
+                    }
                     this.renderer.renderStaticCanvases();
                 }
 
@@ -894,7 +903,7 @@ function(InfoManager, BubbleManager, Renderer, Map, Animation, Sprite, AnimatedT
                     // server also pushes [WILD_ENTER]/[WILD_LEAVE]; this local
                     // check avoids flicker when walking quickly along the edge.
                     var _gx = self.player.gridX, _gy = self.player.gridY;
-                    var _inWild = _gx >= 1 && _gx <= 85 && _gy >= 179 && _gy <= 266;
+                    var _inWild = _gx >= 110 && _gx <= 171 && _gy >= 1 && _gy <= 313;
                     if(_inWild !== self._lastInWild) {
                         self.setWildBanner(_inWild);
                         self._lastInWild = _inWild;
@@ -1493,14 +1502,17 @@ function(InfoManager, BubbleManager, Renderer, Map, Animation, Sprite, AnimatedT
                     // Intercept system-tagged chat from the server for The Wild UI.
                     if(self.player && entityId === self.player.id) {
                         if(message === "[WILD_ENTER]") {
-                            self.setWildBanner(true);
-                            self.showNotification("\u2694 You have entered The Wild. Players may attack you here!");
+                            self.setWildBanner(true, 'enter');
+                            self.showNotification("\u2694 You step into The Wild. Other players can attack you here!");
                             return;
                         }
                         if(message === "[WILD_LEAVE]") {
                             self.setWildBanner(false);
-                            self.showNotification("You leave The Wild behind. Safe again.");
+                            self.showNotification("\uD83D\uDEE1 You leave The Wild. You are safe once more.");
                             return;
+                        }
+                        if(message && message.charAt(0) === '[') {
+                            return; // Any other bracketed system tag, suppress.
                         }
                     }
                     var entity = self.getEntityById(entityId);
@@ -1974,7 +1986,7 @@ function(InfoManager, BubbleManager, Renderer, Map, Animation, Sprite, AnimatedT
         	        // PvP: only swing at another player when both are in The Wild.
         	        var me = this.player,
         	            inWild = function(gx, gy) {
-        	                return gx >= 1 && gx <= 85 && gy >= 179 && gy <= 266;
+        	                return gx >= 110 && gx <= 171 && gy >= 1 && gy <= 313;
         	            };
         	        if(inWild(me.gridX, me.gridY) && inWild(entity.gridX, entity.gridY)) {
         	            this.makePlayerAttack(entity);
@@ -2474,36 +2486,44 @@ function(InfoManager, BubbleManager, Renderer, Map, Animation, Sprite, AnimatedT
         drawFishSprites: function(ctx) {
             if(!this._fishingSpotsIndexed || !this.fishingSpots.length) { return; }
             var camera = this.renderer.camera;
-            var ts = this.renderer.tilesize;
+            var ts = this.renderer.tilesize;            // 16
+            var s = this.renderer.scale || 2;           // context is already translated by -camera.(x|y)*scale.
+            var tsp = ts * s;                           // pixel size of one tile on the canvas
             var t = this.currentTime || Date.now();
             var minX = camera.gridX - 1, maxX = camera.gridX + camera.gridW + 1;
             var minY = camera.gridY - 1, maxY = camera.gridY + camera.gridH + 1;
             ctx.save();
             for(var i = 0; i < this.fishingSpots.length; i++) {
-                var s = this.fishingSpots[i];
-                if(s.x < minX || s.x > maxX || s.y < minY || s.y > maxY) { continue; }
-                var wobble = Math.sin((t + s.phase * 37) / 700);
-                var dx = wobble * (ts * 0.28);
-                var dy = Math.sin((t + s.phase * 61) / 900) * 2;
-                var cx = s.x * ts + ts / 2 + dx;
-                var cy = s.y * ts + ts / 2 + dy;
+                var sp = this.fishingSpots[i];
+                if(sp.x < minX || sp.x > maxX || sp.y < minY || sp.y > maxY) { continue; }
+                var wobble = Math.sin((t + sp.phase * 37) / 700);
+                var dx = wobble * (tsp * 0.3);
+                var dy = Math.sin((t + sp.phase * 61) / 900) * (s * 1.5);
+                var cx = sp.x * tsp + tsp / 2 + dx;
+                var cy = sp.y * tsp + tsp / 2 + dy;
                 var facing = wobble >= 0 ? 1 : -1;
                 // body
-                ctx.fillStyle = 'rgba(255, 190, 90, 0.85)';
+                ctx.fillStyle = 'rgba(255, 190, 90, 0.9)';
                 ctx.beginPath();
-                ctx.ellipse(cx, cy, ts * 0.22, ts * 0.11, 0, 0, Math.PI * 2);
+                ctx.ellipse(cx, cy, tsp * 0.22, tsp * 0.11, 0, 0, Math.PI * 2);
                 ctx.fill();
                 // tail
                 ctx.beginPath();
-                ctx.moveTo(cx - facing * ts * 0.22, cy);
-                ctx.lineTo(cx - facing * ts * 0.32, cy - ts * 0.1);
-                ctx.lineTo(cx - facing * ts * 0.32, cy + ts * 0.1);
+                ctx.moveTo(cx - facing * tsp * 0.22, cy);
+                ctx.lineTo(cx - facing * tsp * 0.34, cy - tsp * 0.1);
+                ctx.lineTo(cx - facing * tsp * 0.34, cy + tsp * 0.1);
                 ctx.closePath();
                 ctx.fill();
+                // outline for contrast against the water
+                ctx.strokeStyle = 'rgba(30, 20, 10, 0.8)';
+                ctx.lineWidth = Math.max(1, s);
+                ctx.beginPath();
+                ctx.ellipse(cx, cy, tsp * 0.22, tsp * 0.11, 0, 0, Math.PI * 2);
+                ctx.stroke();
                 // eye
                 ctx.fillStyle = '#2a1f0f';
                 ctx.beginPath();
-                ctx.arc(cx + facing * ts * 0.12, cy - ts * 0.02, 1, 0, Math.PI * 2);
+                ctx.arc(cx + facing * tsp * 0.12, cy - tsp * 0.02, Math.max(1, s * 0.8), 0, Math.PI * 2);
                 ctx.fill();
             }
             ctx.restore();

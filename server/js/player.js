@@ -110,8 +110,6 @@ module.exports = Player = Character.extend({
 
                         self.inWild = Player.isInWild(x, y);
                         if(self.inWild && !wasInWild) {
-                            // Entry banner message — delivered as a chat bubble from self.
-                            self.broadcastToZone(new Messages.Chat(self, "\u2694 I have entered The Wild! \u2694"), false);
                             self.server.pushToPlayer(self, new Messages.Chat(self, "[WILD_ENTER]"));
                         } else if(!self.inWild && wasInWild) {
                             self.server.pushToPlayer(self, new Messages.Chat(self, "[WILD_LEAVE]"));
@@ -168,9 +166,13 @@ module.exports = Player = Character.extend({
                         var dmg = Formulas.dmg(self.weaponLevel, target.armorLevel);
 
                         if(dmg > 0) {
+                            var wasAlive = target.hitPoints > 0;
                             target.receiveDamage(dmg, self.id);
                             self.server.handleMobHate(target.id, self.id, dmg);
                             self.server.handleHurtEntity(target, self, dmg);
+                            if(wasAlive && target.hitPoints <= 0 && self.onKill) {
+                                self.onKill(target);
+                            }
                         }
                     }
                 }
@@ -422,6 +424,34 @@ module.exports = Player = Character.extend({
         this.connection.close("Player was idle for too long");
     },
 
+    // Called once on the killing blow against a mob. Maintains a kill counter
+    // and, at set thresholds, bumps the player up the weapon ladder and fully
+    // heals them. Broadcasts the equip change so nearby players see the new
+    // sprite, and pushes a chat message to the killer announcing the level.
+    onKill: function(mob) {
+        if(!mob || mob.type !== 'mob') { return; }
+        this.kills = (this.kills || 0) + 1;
+
+        // Weapon progression: every 3 kills grants the next rung, capping out
+        // at BLUESWORD. Starter is SWORD1 (tier 0); after 3 kills -> SWORD2.
+        var ladder = Player.WEAPON_LADDER;
+        var tier = Math.min(Math.floor(this.kills / 3), ladder.length - 1);
+        var desired = ladder[tier];
+        if(desired !== this.weapon) {
+            this.equipWeapon(desired);
+            this.updateHitPoints();
+            this.hitPoints = this.maxHitPoints;
+            this.broadcast(this.equip(desired));
+            this.send(new Messages.HitPoints(this.maxHitPoints).serialize());
+            this.server.pushToPlayer(this, this.health());
+            this.server.pushToPlayer(this, new Messages.Chat(this,
+                "\uD83D\uDDE1 Strength increased! You wield " + Types.getKindAsString(desired).toUpperCase() + "."));
+        } else {
+            this.server.pushToPlayer(this, new Messages.Chat(this,
+                "You've slain " + this.kills + " foes. (" + (3 - (this.kills % 3)) + " more for a stronger weapon)"));
+        }
+    },
+
     // Fishing: a small rod-cast action that heals the player on a cooldown.
     // Broadcasts flavor text to the zone so other players see the action.
     tryFish: function() {
@@ -452,9 +482,20 @@ module.exports = Player = Character.extend({
     }
 });
 
-// The Wild: a PvP-enabled biome covering the forest in the NW of the map.
-// Stepping onto a tile inside this rectangle allows and invites player combat.
-Player.WILD = { x1: 1, y1: 179, x2: 85, y2: 266 };
+// Weapon progression ladder — each kill multiple of 3 advances the player.
+Player.WEAPON_LADDER = [
+    Types.Entities.SWORD1,
+    Types.Entities.SWORD2,
+    Types.Entities.AXE,
+    Types.Entities.MORNINGSTAR,
+    Types.Entities.BLUESWORD,
+    Types.Entities.REDSWORD,
+    Types.Entities.GOLDENSWORD
+];
+
+// The Wild: a PvP-enabled biome in the far east of the map, well away from
+// the starting checkpoints so new players aren't thrown into PvP on spawn.
+Player.WILD = { x1: 110, y1: 1, x2: 171, y2: 313 };
 Player.isInWild = function(x, y) {
     var w = Player.WILD;
     return x >= w.x1 && x <= w.x2 && y >= w.y1 && y <= w.y2;
