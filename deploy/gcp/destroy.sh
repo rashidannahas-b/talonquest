@@ -28,10 +28,28 @@ echo "  - static IP         $NAME-ip (region $REGION)"
 echo "  - firewall rule     $NAME-allow-web"
 echo "  - alert policies    matching '$NAME'"
 echo "  - notification chan '$NAME alerts to *'"
+echo "  - kill-switch       function $NAME-stop-billing, topic $NAME-budget"
+echo "                      service account $NAME-kill-switch@"
+echo
+echo "This does NOT touch the billing budget (deploy/gcp/budget.sh created"
+echo "it at the billing-account level; delete manually in the console if you"
+echo "want that gone too)."
 echo
 if [[ -z "$YES" ]]; then
   read -r -p "Type the name '$NAME' to confirm: " confirm
   [[ "$confirm" == "$NAME" ]] || { echo "aborted"; exit 1; }
+fi
+
+# Warn early if the project is already detached from billing, because every
+# gcloud command below will error out otherwise.
+CURRENT_BA="$(gcloud beta billing projects describe \
+  "$(gcloud config get-value project 2>/dev/null)" \
+  --format='value(billingAccountName)' 2>/dev/null || true)"
+if [[ -z "$CURRENT_BA" ]]; then
+  echo "!! The project has no billing account linked — the kill switch likely"
+  echo "!! fired. Re-link the project in the Console before running destroy,"
+  echo "!! otherwise API calls below will fail."
+  echo
 fi
 
 delete_if_exists() {
@@ -75,5 +93,25 @@ done < <(gcloud alpha monitoring channels list \
             --filter='displayName:TalonQuest' \
             --format='value(name,displayName)')
 
+echo "==> Removing kill-switch Cloud Function"
+if gcloud functions describe "$NAME-stop-billing" --region "$REGION" --gen2 &>/dev/null; then
+  gcloud functions delete "$NAME-stop-billing" --region "$REGION" --gen2 --quiet || true
+fi
+
+echo "==> Removing kill-switch Pub/Sub topic"
+if gcloud pubsub topics describe "$NAME-budget" &>/dev/null; then
+  gcloud pubsub topics delete "$NAME-budget" --quiet || true
+fi
+
+echo "==> Removing kill-switch service account"
+PROJECT="$(gcloud config get-value project 2>/dev/null || true)"
+SA_EMAIL="${NAME}-kill-switch@${PROJECT}.iam.gserviceaccount.com"
+if gcloud iam service-accounts describe "$SA_EMAIL" &>/dev/null; then
+  gcloud iam service-accounts delete "$SA_EMAIL" --quiet || true
+fi
+
 echo
 echo "Done. Billing for these resources has stopped."
+echo "Reminder: the billing budget itself (if you created one with budget.sh)"
+echo "still exists at the billing-account level. Delete it in the Cloud"
+echo "Console if you no longer want the email alerts."

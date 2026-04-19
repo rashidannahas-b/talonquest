@@ -1,0 +1,13 @@
+{
+  "name": "talonquest-kill-switch",
+  "version": "1.0.0",
+  "description": "Detaches the project from billing when the TalonQuest budget is exceeded.",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@google-cloud/billing": "^4.4.0",
+    "@google-cloud/functions-framework": "^3.4.0"
+  }
+}

@@ -71,16 +71,21 @@ One `e2-small` VM + Caddy, flat ~$14/mo compute. Full walkthrough in
 [`deploy/gcp/README.md`](deploy/gcp/README.md).
 
 ```
-# 1. set the billing budget FIRST (alerts, not a hard cap — see docs)
+# 1. set the billing budget FIRST (email alerts at 50/90/100/120%)
 deploy/gcp/budget.sh --amount 25 --email you@example.com
 
-# 2. provision the VM, firewall, static IP, alerts and dashboard
+# 2. OPTIONAL hard cap: a Cloud Function that detaches the project from
+#    billing the moment the budget is exceeded. This kills every billable
+#    service in the project, not just TalonQuest. Re-enable via the console.
+deploy/gcp/kill-switch.sh
+
+# 3. provision the VM, firewall, static IP, alerts and dashboard
 deploy/gcp/provision.sh \
   --domain play.example.com \
   --email  you@example.com \
   --repo   https://github.com/<you>/talonquest.git
 
-# 3. point your DNS A record at the IP the script prints, wait ~2 min, open
+# 4. point your DNS A record at the IP the script prints, wait ~2 min, open
 #    https://play.example.com/
 
 # tear it all down later:

@@ -21,6 +21,7 @@ variable, see the bottom of this file):
 | `provision.sh` | One-shot: reserves a static IP, creates the VM with `setup.sh` as its startup script, creates an email notification channel, applies alert policies, and installs the monitoring dashboard. Idempotent. |
 | `destroy.sh` | Tears down everything `provision.sh` created so billing stops. |
 | `budget.sh` | Creates a Cloud Billing budget with 50/90/100/120% email alerts. Separate because it needs billing-account permissions. |
+| `kill-switch.sh` + `kill-switch/` | Optional **hard** cap: a Pub/Sub topic + Cloud Function that detaches the project from billing when the budget is exceeded. Billing budgets alone only *alert*; this turns everything off. |
 | `setup.sh` | VM-side bootstrap: installs Node 20 + Caddy, clones the repo, runs `npm ci`, sets up systemd + Caddy. Reads config from env vars *or* GCE instance metadata. |
 | `talonquest.service` | systemd unit with memory/restart caps so a crash loop can't rack up bills. |
 | `Caddyfile` | TLS termination (auto Let's Encrypt) and WebSocket-friendly reverse proxy. |
@@ -50,9 +51,51 @@ deploy/gcp/budget.sh --amount 25 --email you@example.com
 ```
 
 Default thresholds: 50%, 90%, 100%, 120%. GCP budgets *alert*; they do not
-hard-cap spend. For an actual cap, wire the Pub/Sub notification into a Cloud
-Function that disables billing on the project:
-<https://cloud.google.com/billing/docs/how-to/notify#cap_disable_billing_to_stop_usage>
+hard-cap spend on their own.
+
+### Optional step 1b — arm the hard cap (`kill-switch.sh`)
+
+To turn budget *alerts* into an actual *"turn it all off"* cap, deploy the
+Cloud Function in `kill-switch/`:
+
+```bash
+deploy/gcp/kill-switch.sh
+```
+
+What it does:
+
+- creates a Pub/Sub topic `talonquest-budget`,
+- creates a `talonquest-kill-switch` service account with
+  `roles/billing.projectManager` on the billing account (the minimum role
+  that can detach a project from billing),
+- deploys a Gen2 Cloud Function (`talonquest-stop-billing`) subscribed to the
+  topic; the function detaches the project from its billing account when
+  `costAmount >= budgetAmount`,
+- points the existing `TalonQuest monthly cap` budget at the topic so its
+  notifications reach the function.
+
+**This stops every billable resource in the project, not just TalonQuest.**
+Re-enable via *Console → Billing → Account management → link project*.
+
+You need `roles/billing.admin` on the billing account to run `kill-switch.sh`
+because it grants IAM at the billing-account level.
+
+Dry-run it without actually disabling billing (set the payload so the
+function's threshold check passes, but point at a non-existent project if you
+want to be extra safe):
+
+```bash
+gcloud pubsub topics publish talonquest-budget \
+  --message='{"costAmount": 999, "budgetAmount": 1, "budgetDisplayName": "dry-run"}'
+gcloud functions logs read talonquest-stop-billing --region us-central1 --gen2 --limit 20
+```
+
+Disarm without tearing down the VM:
+
+```bash
+gcloud functions delete talonquest-stop-billing --region us-central1 --gen2 --quiet
+gcloud pubsub topics delete talonquest-budget --quiet
+```
 
 ## Step 2 — provision the VM and monitoring
 
