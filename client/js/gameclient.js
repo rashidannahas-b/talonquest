@@ -46,12 +46,15 @@ define(['player', 'entityfactory', 'lib/bison'], function(Player, EntityFactory,
         
         connect: function(dispatcherMode) {
             // Match the page protocol so deployments behind TLS use wss://.
-            // When the port matches the page, omit it from the URL so reverse
-            // proxies / CDNs (Fly, Render, Railway, etc.) route correctly.
+            // Only omit the explicit :port when it's the scheme default
+            // (80/443); otherwise browsers silently try port 80/443 and the
+            // WebSocket upgrade fails.
             var isHttps = (typeof window !== 'undefined' && window.location && window.location.protocol === 'https:');
             var scheme = isHttps ? 'wss://' : 'ws://';
-            var samePort = (typeof window !== 'undefined' && window.location && String(window.location.port || (isHttps ? 443 : 80)) === String(this.port));
-            var hostPart = samePort ? this.host : (this.host + ':' + this.port);
+            var defaultPort = isHttps ? 443 : 80;
+            var hostPart = String(this.port) === String(defaultPort)
+                ? this.host
+                : (this.host + ':' + this.port);
             var url = scheme + hostPart + '/',
                 self = this;
             
