@@ -386,15 +386,29 @@ define(['jquery', 'app'], function($, App) {
                         }
                         return false;
                     }
+                    // Arrow keys and WASD: step one tile in that direction
+                    // via the existing pathfinder (so blockers and server
+                    // authority still apply).
+                    var dx = 0, dy = 0;
+                    if(key === 37 || key === 65) { dx = -1; } // Left / A
+                    else if(key === 39 || key === 68) { dx = 1; } // Right / D
+                    else if(key === 38 || key === 87) { dy = -1; } // Up / W
+                    else if(key === 40 || key === 83) { dy = 1; } // Down / S
+                    if(dx !== 0 || dy !== 0) {
+                        if(game.ready && game.player && !game.player.isDead) {
+                            var gx = game.player.gridX + dx,
+                                gy = game.player.gridY + dy;
+                            if(!game.map.isColliding(gx, gy)) {
+                                game.makePlayerGoTo(gx, gy);
+                            }
+                        }
+                        return false;
+                    }
                     if(key === 27) { // ESC
                         app.hideWindows();
                         _.each(game.player.attackers, function(attacker) {
                             attacker.stop();
                         });
-                        return false;
-                    }
-                    if(key === 65) { // a
-                        // game.player.hit();
                         return false;
                     }
                 } else {
@@ -408,6 +422,19 @@ define(['jquery', 'app'], function($, App) {
             if(game.renderer.tablet) {
                 $('body').addClass('tablet');
             }
+
+            // Redraw the world whenever the browser window resizes so the
+            // canvas fills the new viewport instead of letterboxing.
+            var resizeTimer = null;
+            $(window).on('resize', function() {
+                if(resizeTimer) { clearTimeout(resizeTimer); }
+                resizeTimer = setTimeout(function() {
+                    if(game && game.renderer && game.started) {
+                        game.renderer.rescale();
+                        game.renderer.renderStaticCanvases();
+                    }
+                }, 80);
+            });
         });
     };
     

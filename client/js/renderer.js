@@ -703,11 +703,15 @@ function(Camera, Item, Character, Player, Timer) {
         },
     
         renderStaticCanvases: function() {
+            // TalonQuest: the camera now moves every frame, so we must clear
+            // the background before re-blitting the terrain or tiles will
+            // ghost on top of each other as we scroll.
+            this.clearScreen(this.background);
             this.background.save();
                 this.setCameraView(this.background);
                 this.drawTerrain();
             this.background.restore();
-        
+
             if(this.mobile || this.tablet) {
                 this.clearScreen(this.foreground);
                 this.foreground.save();
@@ -743,6 +747,9 @@ function(Camera, Item, Character, Player, Timer) {
                 this.drawEntities();
                 this.drawCombatInfo();
                 this.drawHighTiles(this.context);
+                if(this.game && this.game.drawFishSprites) {
+                    this.game.drawFishSprites(this.context);
+                }
             this.context.restore();
         
             // Overlay UI elements

@@ -13,14 +13,19 @@ define(function() {
         },
     
         rescale: function() {
-            var factor = this.renderer.mobile ? 1 : 2;
-        
-            this.gridW = 15 * factor;
-            this.gridH = 7 * factor;
-        
-            log.debug("---------");
-            log.debug("Factor:"+factor);
-            log.debug("W:"+this.gridW + " H:" + this.gridH);
+            // TalonQuest: size the viewport to the actual browser window
+            // instead of the hard-coded 15x7 tile grid.
+            var renderer = this.renderer,
+                scale = (renderer && renderer.scale) ? renderer.scale
+                      : (renderer && renderer.getScaleFactor ? renderer.getScaleFactor() : 2),
+                ts = 16 * scale,
+                w = (typeof window !== 'undefined') ? window.innerWidth  : 960,
+                h = (typeof window !== 'undefined') ? window.innerHeight : 540;
+
+            this.gridW = Math.max(15, Math.ceil(w / ts));
+            this.gridH = Math.max(10, Math.ceil(h / ts));
+
+            log.debug("Camera " + this.gridW + "x" + this.gridH + " tiles (scale " + scale + ")");
         },
 
         setPosition: function(x, y) {

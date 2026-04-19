@@ -689,6 +689,17 @@ function(InfoManager, BubbleManager, Renderer, Map, Animation, Sprite, AnimatedT
             if(this.started) {
                 this.updateCursorLogic();
                 this.updater.update();
+
+                // TalonQuest: keep the player centred every frame (Runescape
+                // style) instead of only scrolling when the player crosses a
+                // zone boundary. The terrain canvas is re-rendered each tick
+                // because the camera moves continuously now.
+                if(this.player && this.renderer && this.renderer.camera) {
+                    this.renderer.camera.lookAt(this.player);
+                    this.renderer.renderStaticCanvases();
+                }
+
+                this.updateFishingUI();
                 this.renderer.renderFrame();
             }
 
@@ -2163,8 +2174,14 @@ function(InfoManager, BubbleManager, Renderer, Map, Animation, Sprite, AnimatedT
         },
     
         startZoningFrom: function(x, y) {
+            // TalonQuest: the camera is centred on the player every frame so
+            // the fade-and-scroll zone transition is redundant. We keep the
+            // call chain alive so the rest of the game still tracks zone
+            // changes, but skip the visual transition entirely.
             this.zoningOrientation = this.getZoningOrientation(x, y);
-        
+            this.endZoning();
+            return;
+            // eslint-disable-next-line no-unreachable
             if(this.renderer.mobile || this.renderer.tablet) {
                 var z = this.zoningOrientation,
                     c = this.camera,
@@ -2401,6 +2418,95 @@ function(InfoManager, BubbleManager, Renderer, Map, Animation, Sprite, AnimatedT
         // the server interprets as a fishing action.
         sendFish: function() {
             if(this.client) { this.client.sendChat('/fish'); }
+        },
+
+        // Build a set of tile coords where the client map has an animated
+        // tile (water surface, flowing river, etc.). These are the spots where
+        // fish swim and where the Fish button lights up.
+        indexFishingSpots: function() {
+            if(this._fishingSpotsIndexed) { return; }
+            var map = this.map;
+            if(!map || !map.data || !map.isAnimatedTile) { return; }
+            this.fishingSpots = [];
+            this.fishingSpotSet = {};
+            var w = map.width;
+            for(var i = 0; i < map.data.length; i++) {
+                var t = map.data[i], hit = false;
+                if(Array.isArray(t)) {
+                    for(var j = 0; j < t.length; j++) {
+                        if(map.isAnimatedTile(t[j])) { hit = true; break; }
+                    }
+                } else if(map.isAnimatedTile(t)) {
+                    hit = true;
+                }
+                if(hit) {
+                    var x = i % w, y = Math.floor(i / w);
+                    this.fishingSpots.push({ x: x, y: y, phase: (x * 13 + y * 7) % 1000 });
+                    this.fishingSpotSet[x + ',' + y] = true;
+                }
+            }
+            this._fishingSpotsIndexed = true;
+            log.debug("Indexed " + this.fishingSpots.length + " fishing spots");
+        },
+
+        isAdjacentToWater: function(gx, gy) {
+            var s = this.fishingSpotSet;
+            if(!s) { return false; }
+            return !!(s[(gx - 1) + ',' + gy] || s[(gx + 1) + ',' + gy] ||
+                      s[gx + ',' + (gy - 1)] || s[gx + ',' + (gy + 1)] ||
+                      s[gx + ',' + gy]);
+        },
+
+        // Hides the Fish button unless the player is standing next to a water
+        // tile. Called every tick from game.tick().
+        updateFishingUI: function() {
+            if(!this._fishingSpotsIndexed) { this.indexFishingSpots(); }
+            var btn = document.getElementById('fish-button');
+            if(!btn || !this.player) { return; }
+            var show = this.isAdjacentToWater(this.player.gridX, this.player.gridY);
+            if(show) { btn.classList.add('visible'); }
+            else     { btn.classList.remove('visible'); }
+        },
+
+        // Draw swimming fish silhouettes on top of animated water tiles. The
+        // renderer calls this every frame with the entities context already
+        // set to camera-space coordinates.
+        drawFishSprites: function(ctx) {
+            if(!this._fishingSpotsIndexed || !this.fishingSpots.length) { return; }
+            var camera = this.renderer.camera;
+            var ts = this.renderer.tilesize;
+            var t = this.currentTime || Date.now();
+            var minX = camera.gridX - 1, maxX = camera.gridX + camera.gridW + 1;
+            var minY = camera.gridY - 1, maxY = camera.gridY + camera.gridH + 1;
+            ctx.save();
+            for(var i = 0; i < this.fishingSpots.length; i++) {
+                var s = this.fishingSpots[i];
+                if(s.x < minX || s.x > maxX || s.y < minY || s.y > maxY) { continue; }
+                var wobble = Math.sin((t + s.phase * 37) / 700);
+                var dx = wobble * (ts * 0.28);
+                var dy = Math.sin((t + s.phase * 61) / 900) * 2;
+                var cx = s.x * ts + ts / 2 + dx;
+                var cy = s.y * ts + ts / 2 + dy;
+                var facing = wobble >= 0 ? 1 : -1;
+                // body
+                ctx.fillStyle = 'rgba(255, 190, 90, 0.85)';
+                ctx.beginPath();
+                ctx.ellipse(cx, cy, ts * 0.22, ts * 0.11, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // tail
+                ctx.beginPath();
+                ctx.moveTo(cx - facing * ts * 0.22, cy);
+                ctx.lineTo(cx - facing * ts * 0.32, cy - ts * 0.1);
+                ctx.lineTo(cx - facing * ts * 0.32, cy + ts * 0.1);
+                ctx.closePath();
+                ctx.fill();
+                // eye
+                ctx.fillStyle = '#2a1f0f';
+                ctx.beginPath();
+                ctx.arc(cx + facing * ts * 0.12, cy - ts * 0.02, 1, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
         },
 
         removeObsoleteEntities: function() {
